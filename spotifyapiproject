@@ -1,0 +1,96 @@
+from random import shuffle
+import spotipy
+from spotipy.oauth2 import SpotifyOAuth
+
+USERNAME = "11165460897"
+CLIENT_ID = "63fa22c4032d41f5b8b33d99d1d447dd"
+CLIENT_SECRET = "d00b8eeb00ec4595ad863ecef2168bbc"
+REDIRECT_URI = "http://localhost:8081/"
+
+# Playlists created by this app are private
+SCOPE = "playlist-modify-private"
+
+CITY_KEY_WORDS = {
+    "london": ["notting hill", "fuse", "big ben", "hyde park"],
+    "paris": ["eiffel tower", "notre dame", "louvre"],
+    "new york": ["manhattan", "new york city", "nyc", "ny", "empire state", "wall street" ],
+    "rome": ["colosseum", "roma", "vatican"],
+    "berlin": ["berghain", "techno"],
+}
+# Connect to Spotify's API
+sp = spotipy.Spotify(
+    auth_manager=SpotifyOAuth(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, scope=SCOPE)
+)
+
+
+def fetch_tracks(city, num_songs):
+    """
+    Searches Spotify for songs that are about `city`
+    :param city: The name of a city
+    :param num_songs: Maximum number of songs to return
+    :return: A list of tracks, each of which is a dictionary that includes
+        - name: track name
+        - artist: artist
+        - external_urls: URL to stream the track
+    """
+    results = []
+    # Search both for `city` and for key words associated with `city`
+    for search_term in [city, *CITY_KEY_WORDS[city.lower()]]:
+        response = sp.search(search_term, limit=50)  # 50 is the maximum Spotify's API allows
+        # If `response` contains tracks, add them to `results`. Otherwise, move on to the next
+        # search term
+        if response:
+            try:
+                results += response["tracks"]["items"]
+            except KeyError:
+                pass
+    # Shuffle the results so that they are not ordered by key word and return
+    # at most `num_songs`
+    shuffle(results)
+    return results[: num_songs]
+
+
+def display_tracks(tracks):
+    """
+    Prints the name, artist and URL of each track in `tracks`
+    :param tracks: A list of tracks that have been returned by Spotify's API. Each track in `tracks`
+    must be a dictionary that contains
+        - name: track name
+        - artist: artist
+        - external_urls: URL to stream the track
+    """
+    for num, track in enumerate(tracks):
+        print(
+            f"{num + 1}. {track['name']} - {track['artists'][0]['name']} "
+            f"{track['external_urls']['spotify']}"
+        )
+
+
+def create_playlist(name, tracks):
+    """
+    Create a playlist and add tracks to it
+    :param name: Name of the playlist
+    :param tracks: Track IDs to add
+    """
+    playlist = sp.user_playlist_create(USERNAME, name, public=False)
+    sp.playlist_add_items(playlist["id"], tracks)
+    print(f"Created new playlist '{playlist['name']}' at {playlist['external_urls']['spotify']}")
+
+
+def main():
+    city = input("Virtual holiday city? ").strip()  # Strip out trailing spaces
+    if city.lower() not in CITY_KEY_WORDS:
+        print(f"Unfortunately, '{city}' is not yet in our system. "
+              "We will add it to our requests file.")
+        with open("requests.txt", mode="a") as f:
+            f.write(f"{city.lower()}\n")
+        return
+    number_of_songs = input("How many songs would you like? ")
+    tracks = fetch_tracks(city, int(number_of_songs))
+    display_tracks(tracks)
+    create_playlist(f"Songs about {city}", [track["id"] for track in tracks])
+
+
+if __name__ == "__main__":
+    main()
+
